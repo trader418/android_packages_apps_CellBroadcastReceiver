@@ -22,7 +22,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Bundle;
 import android.telephony.CellBroadcastMessage;
-import android.util.Log;
 
 /**
  * Custom alert dialog with optional flashing warning icon.
@@ -30,7 +29,6 @@ import android.util.Log;
  * Keyguard handling based on {@code AlarmAlert} class from DeskClock app.
  */
 public class CellBroadcastAlertDialog extends CellBroadcastAlertFullScreen {
-    private static final String TAG = "CellBroadcastAlertDialog";
 
     private BroadcastReceiver mScreenOffReceiver;
 
@@ -45,7 +43,6 @@ public class CellBroadcastAlertDialog extends CellBroadcastAlertFullScreen {
     protected void onCreate(Bundle icicle) {
         super.onCreate(icicle);
 
-        Log.d(TAG, "Alert Dialog Created");
         // Listen for the screen turning off so that when the screen comes back
         // on, the user does not need to unlock the phone to dismiss the alert.
         if (CellBroadcastConfigService.isEmergencyAlertMessage(getLatestMessage())) {
