@@ -46,8 +46,8 @@ import java.util.List;
 
 public class CellBroadcastReceiver extends BroadcastReceiver {
     private static final String TAG = "CellBroadcastReceiver";
-    static final boolean DBG = false;    // STOPSHIP: change to false before ship
-    private static int mServiceState = -1;
+    static final boolean DBG = true;    // STOPSHIP: change to false before ship
+    private int[] mServiceState = null;
     private static final String GET_LATEST_CB_AREA_INFO_ACTION =
             "android.cellbroadcastreceiver.GET_LATEST_CB_AREA_INFO";
 
@@ -63,18 +63,32 @@ public class CellBroadcastReceiver extends BroadcastReceiver {
 
         if (TelephonyIntents.ACTION_SERVICE_STATE_CHANGED.equals(action)) {
             if (DBG) log("Intent ACTION_SERVICE_STATE_CHANGED");
-            int subId = intent.getExtras().getInt(PhoneConstants.SUBSCRIPTION_KEY);
+            int subId = intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY,
+                    SubscriptionManager.INVALID_SUBSCRIPTION_ID);
             Log.d(TAG, "subscriptionId = " + subId);
             if (!SubscriptionManager.isValidSubscriptionId(subId)) {
                 return;
             }
             ServiceState serviceState = ServiceState.newFromBundle(intent.getExtras());
             int newState = serviceState.getState();
-            if (newState != mServiceState) {
+            SubscriptionInfo subInfo = SubscriptionManager.from(context).
+                    getActiveSubscriptionInfo(subId);
+            if (subInfo == null) {
+                loge("subId is not active:" + subId);
+                return;
+            }
+            int slotId = subInfo.getSimSlotIndex();
+            if (mServiceState == null) {
+                int phoneCount = TelephonyManager.getDefault().getPhoneCount();
+                mServiceState = new int[phoneCount];
+                for (int i = 0; i < phoneCount; i++) {
+                    mServiceState[i] =  ServiceState.STATE_OUT_OF_SERVICE;
+                }
+            }
+            if (newState != mServiceState[slotId]) {
                 Log.d(TAG, "Service state changed! " + newState + " Full: " + serviceState +
-                        " Current state=" + mServiceState);
-                mServiceState = newState;
-
+                        " Current state=" + mServiceState[slotId]);
+                mServiceState[slotId] = newState;
                 if (((newState == ServiceState.STATE_IN_SERVICE) ||
                         (newState == ServiceState.STATE_EMERGENCY_ONLY)) &&
                         (UserHandle.myUserId() == UserHandle.USER_OWNER)) {
@@ -121,18 +135,20 @@ public class CellBroadcastReceiver extends BroadcastReceiver {
             }
         } else if (GET_LATEST_CB_AREA_INFO_ACTION.equals(action)) {
             if (privileged) {
-                CellBroadcastMessage message = CellBroadcastReceiverApp.getLatestAreaInfo();
-                if (message != null) {
-                    Intent areaInfoIntent = new Intent(
-                            CellBroadcastAlertService.CB_AREA_INFO_RECEIVED_ACTION);
-                    areaInfoIntent.putExtra("message", message);
-                    // Send broadcast twice, once for apps that have PRIVILEGED permission and once
-                    // for those that have the runtime one
-                    context.sendBroadcastAsUser(areaInfoIntent, UserHandle.ALL,
-                            android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE);
-                    context.sendBroadcastAsUser(areaInfoIntent, UserHandle.ALL,
-                            android.Manifest.permission.READ_PHONE_STATE);
-                }
+                int subId = intent.getIntExtra(PhoneConstants.SUBSCRIPTION_KEY,
+                        SubscriptionManager.getDefaultSmsSubId());
+                CellBroadcastMessage message = CellBroadcastReceiverApp.getLatestAreaInfo(subId);
+                Log.d(TAG, "onReceive GET_LATEST_CB_AREA_INFO_ACTION subId :" + subId
+                        + "message :" + message);
+                Intent areaInfoIntent = new Intent(
+                        CellBroadcastAlertService.CB_AREA_INFO_RECEIVED_ACTION);
+                areaInfoIntent.putExtra("message", message);
+                // Send broadcast twice, once for apps that have PRIVILEGED permission and once
+                // for those that have the runtime one
+                context.sendBroadcastAsUser(areaInfoIntent, UserHandle.ALL,
+                        android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE);
+                context.sendBroadcastAsUser(areaInfoIntent, UserHandle.ALL,
+                        android.Manifest.permission.READ_PHONE_STATE);
             } else {
                 Log.e(TAG, "caller missing READ_PHONE_STATE permission, returning");
             }
